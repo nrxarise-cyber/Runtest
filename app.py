@@ -77,5 +77,7 @@ def check_card_api():
 # NEW: SERVER START LOGIC (Jo aapke code mein missing tha)
 # -----------------------------------------------------------------
 if __name__ == '__main__':
-    # Server ko port 5000 par debug mode me start karega
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Railway automatically 'PORT' env variable provide karta hai
+    port = int(os.environ.get("PORT", 5000))
+    # host='0.0.0.0' hona zaroori hai taaki outside world se request aa sake
+    app.run(host='0.0.0.0', port=port)
