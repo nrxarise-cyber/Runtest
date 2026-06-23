@@ -1,83 +1,105 @@
 from flask import Flask, request, jsonify
 import os
-import requests  # Future use ke liye jab aap real API hit karenge
+import threading
+import telebot  # PyTelegramBotAPI library
 
 app = Flask(__name__)
 
+# -----------------------------------------------------------------
+# TELEGRAM BOT SETUP (Auto-Start)
+# -----------------------------------------------------------------
+# BotFather ka token yahan paste karein ya Railway Variables me BOT_TOKEN set karein
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YAHAN_APNA_TELEGRAM_BOT_TOKEN_DAALEIN")
+bot = telebot.TeleBot(BOT_TOKEN)
+
 def check_shopify_card(site, cc, proxy):
     """
-    Card data split karta hai aur response check karta hai.
+    Backend logical framework for card verification.
     """
     try:
-        # 1. CC Data ko split karna (Format: 4487160040340792|06|26|452)
         cc_parts = cc.split('|')
         if len(cc_parts) < 4:
             return {"status": "Error", "message": "Invalid CC Format (Use: cc|mm|yy|cvv)"}
         
         card_num, exp_month, exp_year, cvv = cc_parts[0], cc_parts[1], cc_parts[2], cc_parts[3]
 
-        # 2. Proxy Setup
-        proxies = None
-        if proxy:
-            proxies = {
-                "http": f"http://{proxy}",
-                "https": f"http://{proxy}"
-            }
-
-        # --- GATEWAY RESPONSE LOGIC ---
-        # Abhi ke liye hum gateway_text ko dynamic test karne ke liye 'insufficient_funds' maan rahe hain.
-        # Jab aap real request bhejenge, toh ye line badal jayegi: gateway_text = response.text
+        # --- DUMMY GATEWAY TEXT ---
+        # Real integration ke waqt aap yahan requests ka response text pass karenge.
         gateway_text = "insufficient_funds" 
         
         if "success" in gateway_text or "status\":\"paid" in gateway_text:
             return {"status": "🟢 CHARGED / APPROVED", "message": "Card successfully charged!"}
-            
         elif "insufficient" in gateway_text.lower():
             return {"status": "🔴 DECLINED: INSUFFICIENT FUNDS", "message": "Card has low balance."}
-            
         elif "stolen" in gateway_text.lower() or "pickup" in gateway_text.lower():
             return {"status": "❌ DECLINED: STOLEN/RESTRICTED", "message": "Card is blocked."}
-            
         elif "incorrect_cvc" in gateway_text.lower() or "cvv" in gateway_text.lower():
             return {"status": "❌ DECLINED: WRONG CVV", "message": "CVV check failed."}
-            
         else:
             return {"status": "💜 DECLINED", "message": "Card was declined by gateway."}
 
     except Exception as e:
         return {"status": "⚠️ ERROR", "message": f"Execution failed: {str(e)}"}
 
-# -----------------------------------------------------------------
-# NEW: API ROUTE (Jo aapke code mein missing thi)
-# -----------------------------------------------------------------
-@app.route('/check', methods=['GET', 'POST'])
-def check_card_api():
-    # GET aur POST dono requests se data uthane ke liye
-    if request.method == 'POST':
-        # Agar JSON data bheja gaya ho
-        data = request.get_json() or request.form
-    else:
-        # Agar URL query parameters hain (?cc=...&site=...)
-        data = request.args
-
-    site = data.get('site', '')
-    cc = data.get('cc', '')
-    proxy = data.get('proxy', '')
-
-    if not cc:
-        return jsonify({"status": "Error", "message": "CC parameter is required!"}), 400
-
-    # Function ko call karke result lena
-    result = check_shopify_card(site, cc, proxy)
-    
-    # JSON response return karna
-    return jsonify(result)
 
 # -----------------------------------------------------------------
-# NEW: SERVER START LOGIC (Jo aapke code mein missing tha)
+# SINGLE TELEGRAM COMMAND: /sh
 # -----------------------------------------------------------------
+@bot.message_handler(commands=['sh'])
+def handle_shopify_check(message):
+    try:
+        # Command input check: /sh site|cc|proxy
+        input_text = message.text.split(' ', 1)
+        if len(input_text) < 2:
+            bot.reply_to(message, "❌ **Format:** `/sh site|cc|proxy`", parse_mode="Markdown")
+            return
+
+        # Splitting input parameters
+        parts = input_text[1].split('|')
+        if len(parts) < 6:
+            bot.reply_to(message, "❌ **Missing Data!** Format sahi se check karein.\n`site | card | mm | yy | cvv | proxy`")
+            return
+
+        site = parts[0].strip()
+        cc = f"{parts[1].strip()}|{parts[2].strip()}|{parts[3].strip()}|{parts[4].strip()}"
+        proxy = parts[5].strip()
+
+        # Processing Notification
+        status_msg = bot.reply_to(message, "⏳ *Checking Card via Backend...*", parse_mode="Markdown")
+
+        # Calling the backend core logic
+        result = check_shopify_card(site, cc, proxy)
+
+        # Final response output on Telegram
+        response_msg = (
+            f"💳 **Card:** `{cc}`\n"
+            f"🌐 **Site:** {site}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📝 **Status:** {result['status']}\n"
+            f"ℹ️ **Message:** {result['message']}"
+        )
+        
+        bot.edit_message_text(response_msg, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+
+    except Exception as e:
+        bot.reply_to(message, f"⚠️ **Backend Error:** {str(e)}")
+
+
+# -----------------------------------------------------------------
+# BACKEND AUTO-START FUNCTION
+# -----------------------------------------------------------------
+def run_bot_in_background():
+    # Bot bina kisi API hit ke backend me auto-start ho jayega
+    bot.infinity_polling(skip_pending=True)
+
+# Start background thread before Flask initializes
+threading.Thread(target=run_bot_in_background, daemon=True).start()
+
+
+@app.route('/')
+def home():
+    return "Backend Engine is Online & Running Telegram Bot."
+
 if __name__ == '__main__':
-    # Railway automatically 'PORT' env variable provide karta hai
     port = int(os.environ.get("PORT", 5000))
-    # host='0.0.0.0' hona zaroori hai taaki outside world se request aa sake
     app.run(host='0.0.0.0', port=port)
