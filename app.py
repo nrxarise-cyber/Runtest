@@ -12,8 +12,9 @@ app = Flask(__name__)
 SHOPIFY_SITE = "https://ferrierdesigns.myshopify.com"
 PROXY_CONFIG = "3930:eQBl6g1qpdjU@p104.instantproxies.com:9290"
 
-# Secure Token Loading from Railway Environment Variables
-BOT_TOKEN = "7627130297:AAF8oEnwCxV0a3doIKcFDhiazsvGP9p1Z74" os.environ.get("BOT_TOKEN")
+# Secure Token Loading from Railway Environment Variable
+# Sahi tarika: Function ke andar dusra argument default value hota hai
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7627130297:AAF8oEnwCxV0a3doIKcFDhiazsvGP9p1Z74")
 
 if not BOT_TOKEN:
     # Agar variable nahi milega toh log mein saaf dikhega
