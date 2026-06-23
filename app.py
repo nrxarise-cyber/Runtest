@@ -112,7 +112,7 @@ def run_bot_in_background():
     if bot:
         try:
             print("🤖 Telegram Bot Polling Triggered Successfully...")
-            bot.infinity_polling(skip_pending=True)
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"❌ Critical Bot Error in Background Thread: {str(e)}")
 
